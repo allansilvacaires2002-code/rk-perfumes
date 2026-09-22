@@ -26,8 +26,8 @@ def inicializar_banco():
   # Tabela de Produtos / Estoque
   cursor.execute("""
         CREATE TABLE IF NOT EXISTS produtos (
-            codigo TEXT,
-            nome TEXT PRIMARY KEY,
+            codigo TEXT PRIMARY KEY,
+            nome TEXT,
             categoria TEXT,
             preco_custo TEXT,
             preco_venda TEXT,
@@ -98,7 +98,7 @@ def carregar_vendas():
   return df
 
 
-# Estilização CSS completa para o Modo Escuro Profundo
+# Estilização CSS completa para o Modo Escuro Profundo e correção de botões
 st.markdown(
     """
     <style>
@@ -158,17 +158,21 @@ st.markdown(
             color: #ffffff !important;
         }
 
-        /* Botões customizados com verde esmeralda */
-        .stButton>button {
+        /* CORREÇÃO DOS BOTÕES (Garante cor verde esmeralda e texto branco legível) */
+        div.stButton > button, 
+        div.stFormSubmitButton > button {
             background-color: #00b074 !important;
-            color: white !important;
-            border-radius: 8px;
-            padding: 8px 16px;
-            border: none;
-            font-weight: 600;
+            color: #ffffff !important;
+            border-radius: 8px !important;
+            padding: 8px 16px !important;
+            border: none !important;
+            font-weight: 600 !important;
         }
-        .stButton>button:hover {
+        
+        div.stButton > button:hover, 
+        div.stFormSubmitButton > button:hover {
             background-color: #00915f !important;
+            color: #ffffff !important;
         }
 
         /* Campos de texto e inputs escuros */
@@ -402,22 +406,29 @@ elif menu_opcao == "Estoque":
   st.divider()
 
   if acao_produto == "Cadastrar Novo Produto":
+    proximo_cod_num = len(df_produtos) + 1
+    codigo_automatico = f"PROD-{proximo_cod_num:03d}"
+
     with st.form("form_produto", clear_on_submit=True):
+      st.info(
+          f"🆔 **Código Automático gerado para o novo produto:**"
+          f" {codigo_automatico}"
+      )
+
       col1, col2, col3 = st.columns(3)
       with col1:
-        cod_prod = st.text_input("Código do Produto")
         nome_prod = st.text_input("Nome / Marca / Linha (Ex: Essencial Oud)")
-      with col2:
         cat_prod = st.selectbox(
             "Categoria", ["Masculino", "Feminino", "Unissex"]
         )
+      with col2:
         preco_custo = st.number_input(
             "Preço de Custo (R$)", min_value=0.0, format="%.2f"
         )
-      with col3:
         preco_venda = st.number_input(
             "Preço de Venda (R$)", min_value=0.0, format="%.2f"
         )
+      with col3:
         qtd_estoque = st.number_input(
             "Quantidade em Estoque", min_value=0, step=1
         )
@@ -442,7 +453,7 @@ elif menu_opcao == "Estoque":
             INSERT OR REPLACE INTO produtos VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
             (
-                cod_prod,
+                codigo_automatico,
                 nome_prod,
                 cat_prod,
                 f"R$ {preco_custo:.2f}",
@@ -481,9 +492,7 @@ elif menu_opcao == "Estoque":
 
         col1, col2, col3 = st.columns(3)
         with col1:
-          novo_cod = st.text_input("Código do Produto", value=prod_atual["codigo"])
           novo_nome = st.text_input("Nome do Perfume", value=prod_atual["nome"])
-        with col2:
           nova_cat = st.selectbox(
               "Categoria",
               ["Masculino", "Feminino", "Unissex"],
@@ -496,19 +505,20 @@ elif menu_opcao == "Estoque":
                   else 0
               ),
           )
+        with col2:
           novo_custo = st.number_input(
               "Preço de Custo (R$)",
               min_value=0.0,
               value=custo_limpo,
               format="%.2f",
           )
-        with col3:
           nova_venda = st.number_input(
               "Preço de Venda (R$)",
               min_value=0.0,
               value=venda_limpo,
               format="%.2f",
           )
+        with col3:
           novo_qtd = st.number_input(
               "Quantidade em Estoque",
               min_value=0,
@@ -531,17 +541,11 @@ elif menu_opcao == "Estoque":
 
           conn = criar_conexao()
           cursor = conn.cursor()
-          # Se mudou o nome, apaga o antigo e insere o novo para evitar duplicidade de PK
-          if produto_editar != novo_nome:
-            cursor.execute(
-                "DELETE FROM produtos WHERE nome = ?", (produto_editar,)
-            )
           cursor.execute(
               """
-                INSERT OR REPLACE INTO produtos VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                UPDATE produtos SET nome = ?, categoria = ?, preco_custo = ?, preco_venda = ?, lucro_unitario = ?, margem = ?, estoque = ?, status = ? WHERE codigo = ?
             """,
               (
-                  novo_cod,
                   novo_nome,
                   nova_cat,
                   f"R$ {novo_custo:.2f}",
@@ -550,6 +554,7 @@ elif menu_opcao == "Estoque":
                   f"{margem_perc:.1f}%",
                   novo_qtd,
                   status,
+                  prod_atual["codigo"],
               ),
           )
           conn.commit()
@@ -761,7 +766,7 @@ elif menu_opcao == "Vendas":
             )
             detalhe_pagamento = f"Cartão de Crédito (Parcelado {parcelas})"
           else:
-            detalhe_pagamento = "Cartão de Crédito (À vista)"
+            detalhe_pagamento = f"Cartão de Crédito (À vista)"
           status_pag = "Pago no Crédito"
 
         elif metodo_principal == "Cartão de Débito":
@@ -808,11 +813,9 @@ elif menu_opcao == "Vendas":
           lucro_total = qtd_venda * p_lucro
           data_hora_atual = datetime.now().strftime("%d/%m/%Y %H:%M")
 
-          # Atualizar Banco de Dados SQL (Estoque e Venda)
           conn = criar_conexao()
           cursor = conn.cursor()
 
-          # Atualiza estoque do produto
           cursor.execute(
               """
                 UPDATE produtos SET estoque = ?, status = ? WHERE nome = ?
@@ -820,7 +823,6 @@ elif menu_opcao == "Vendas":
               (novo_estoque, novo_status_estoque, perfume_venda),
           )
 
-          # Insere o registo da venda
           cursor.execute(
               """
                 INSERT INTO vendas (data_hora, cliente, perfume, quantidade, valor_total, forma_pagamento, status_pagamento, lucro)
